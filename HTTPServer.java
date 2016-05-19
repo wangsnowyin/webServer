@@ -1,6 +1,6 @@
 /**
  * Created by Xueyin Wang and Xiaoyang Xu
- * on May 19
+ * on May 2
  */
 
 import java.net.*;
@@ -41,25 +41,26 @@ public class HTTPServer {
 		
 		@Override
 		public void run() {
-			boolean keepAlive = false;
+			boolean keepAlive = true;
 			
 			try{
 				//initiate input and output stream of SSLSocket
 				this.fromClient = new BufferedReader(new InputStreamReader(sslSocket.getInputStream()));
 				this.toClient = new BufferedOutputStream(sslSocket.getOutputStream());
 				
-				keepAlive = dealWithRequest(fromClient, toClient);
-				
+				//handle with persistent or non-persistent connection
+				while(keepAlive){
+					keepAlive = dealWithRequest(fromClient, toClient);
+				}
+								
 			}catch(Exception e){
 				e.printStackTrace();
 			}finally{
-				//handle with persistent or non-persistent connection
-				try{
-					if(keepAlive){
-						sslSocket.setKeepAlive(true);
-					}else{
-						sslSocket.close();
-					}
+				//close connection
+				try{	
+					fromClient.close();
+					toClient.close();
+					sslSocket.close();
 				}catch(Exception e){
 					e.printStackTrace();
 				}			
@@ -80,25 +81,26 @@ public class HTTPServer {
 		
 		@Override
 		public void run() {
-			boolean keepAlive = false;
+			boolean keepAlive = true;
 			
 			try {		
 				//initiate input and output stream of socket
 				this.fromClient = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 				this.toClient = new BufferedOutputStream(socket.getOutputStream());
 				
-				keepAlive = dealWithRequest(fromClient, toClient);
-				
+				//handle with persistent or non-persistent connection
+				while(keepAlive){
+					keepAlive = dealWithRequest(fromClient, toClient);
+				}
+								
 			} catch(Exception e) {
 				e.printStackTrace();
 			}finally{
-				//handle with persistent or non-persistent connection
-				try{
-					if(keepAlive){
-						socket.setKeepAlive(true);
-					}else{
-						socket.close();
-					}
+				//close connection
+				try{	
+					fromClient.close();
+					toClient.close();
+					socket.close();
 				}catch(Exception e){
 					e.printStackTrace();
 				}
