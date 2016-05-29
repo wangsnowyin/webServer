@@ -1,3 +1,5 @@
+package server;
+
 /**
  * Created by Xueyin Wang and Xiaoyang Xu
  * on May 2
@@ -7,9 +9,14 @@ import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.util.*;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSocket;
 
 import java.io.*;
@@ -29,6 +36,30 @@ public class HTTPServer {
 		put("jpeg", "image/jpeg");
 		put("", "\r\n");
 	}};
+	
+	// Create and initialize SSLContext
+	private static SSLContext createSSLContext() {
+		SSLContext sslContext = null;
+		String ksFileName = "server.jks";
+		char ksPassword[] = "project2".toCharArray();
+		char kmPassword[] = "project2".toCharArray();
+				
+		try{
+			// Create key store
+			KeyStore keyStore = KeyStore.getInstance("JKS");
+			keyStore.load(new FileInputStream(ksFileName), ksPassword);
+			// Create key manager
+			KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+			keyManagerFactory.init(keyStore, kmPassword);
+			// Create and initialize SSLContext
+			sslContext = SSLContext.getInstance("TLS");
+			sslContext.init(keyManagerFactory.getKeyManagers(), null, null);	
+				
+		}catch(Exception sce) {
+			sce.printStackTrace();
+		}
+		return sslContext;
+	}
 	
 	private static class HTTPSHandler implements Runnable {
 		private SSLSocket sslSocket;
@@ -122,6 +153,7 @@ public class HTTPServer {
 		//get and tokenize the HTTP request from client
 		String inline = fromClient.readLine();
 		String header = inline;
+		System.out.println("dealWithRequest_inline: " + header);
 		StringTokenizer tokenizer = new StringTokenizer(header);
 		String HTTPMethod = tokenizer.nextToken();
 		String HTTPQuery = tokenizer.nextToken();
@@ -241,12 +273,11 @@ public class HTTPServer {
 			System.exit(-1);
 		}
 		
-		int port = Integer.parseInt(args[0].split("=")[1]);
-		int sslPort = Integer.parseInt(args[1].split("=")[2]);
-		ServerSocket serverSocket = new ServerSocket(port);
-		
-		//deal with SSLServerSocket
-		SSLServerSocket sslServerSocket;
+		System.setProperty("sun.security.ssl.allowUnsafeRenegotiation", "true");
+		System.setProperty("sun.security.ssl.allowLegacyHelloMessages", "true");
+
+		final int port = Integer.parseInt(args[0].split("=")[1]);
+		final int sslPort = Integer.parseInt(args[1].split("=")[1]);
 		
 		//load redirect map
 		redirectMap = new Hashtable<String, String>();
@@ -265,15 +296,47 @@ public class HTTPServer {
 			e.printStackTrace();
 		}
 		
-		// Handle multiple requests
-		while(true) {			
-			//handle HTTP request
-			Socket connection = serverSocket.accept();			
-			new Thread(new RequestHandler(connection)).start();
-			
-			//handle HTTPS request
-			
-		}
+		//handle HTTP requests
+		Thread httpThread = new Thread() {
+			public void run() {
+				try {
+					ServerSocket serverSocket = new ServerSocket(port);
+					
+					while(true) {
+						Socket connection = serverSocket.accept();
+						System.out.println("ServerSocket accepted");
+						new Thread(new RequestHandler(connection)).start();
+						System.out.println("HTTP started");
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		
+		//handle HTTPS requests
+		Thread httpsThread = new Thread() {
+			public void run() {
+				try {
+					SSLContext sslContext = createSSLContext();
+					SSLServerSocketFactory sslServerSocketFactory = sslContext.getServerSocketFactory();
+					SSLServerSocket sslServerSocket = (SSLServerSocket) sslServerSocketFactory.createServerSocket(sslPort);
+					
+					while(true) {
+						SSLSocket sslConn = (SSLSocket) sslServerSocket.accept();
+						System.out.println("SSLServerSocket accepted");
+						new Thread(new HTTPSHandler(sslConn)).start();
+						System.out.println("HTTPS started");
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		
+		httpThread.start();
+		httpsThread.start();
+		
 	}
 
 }
